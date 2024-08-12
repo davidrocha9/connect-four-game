@@ -3,28 +3,60 @@
 #include <climits>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
+#include <Utils.h>
+#include <SDL2/SDL_ttf.h>
 
 using namespace std;
 
 Board::Board(SDL_Renderer *renderer)
     : renderer(renderer), rows(6), cols(7), cellSize(100), playerTurn(PLAYER_1), selectedCol(-1),
       bgColor({0x00, 0x00, 0xFF, 0xFF}), lineColor({0x00, 0x00, 0x00, 0xFF}),
-      player1Color({0xFF, 0x00, 0x00, 0xFF}), player2Color({0x00, 0xFF, 0x00, 0xFF})
+      player1Color({0xFF, 0x00, 0x00, 0xFF}), player2Color({0x00, 0xFF, 0x00, 0xFF}), textColor({0x00, 0x00, 0x00, 0xFF})
 {
     grid.resize(rows, vector<int>(cols, 0));
 
-    LoadTexture("../assets/red.png", redDiscTexture);
-    LoadTexture("../assets/blue.png", blueDiscTexture);
+    if (TTF_Init() == -1)
+    {
+        std::cerr << "TTF_Init Error: " << TTF_GetError() << std::endl;
+    }
+
+    font = TTF_OpenFont("../fonts/font.ttf", 25);
+    if (!font)
+    {
+        std::cerr << "TTF_OpenFont Error: " << TTF_GetError() << std::endl;
+    }
+
+    LoadTexture("../assets/red.png", renderer, redDiscTexture);
+    LoadTexture("../assets/blue.png", renderer, blueDiscTexture);
 }
 
 Board::~Board()
 {
     if (redDiscTexture)
+    {
         SDL_DestroyTexture(redDiscTexture);
+        redDiscTexture = nullptr;
+    }
     if (blueDiscTexture)
+    {
         SDL_DestroyTexture(blueDiscTexture);
+        blueDiscTexture = nullptr;
+    }
+
+    if (font)
+    {
+        TTF_CloseFont(font);
+        font = nullptr;
+    }
 
     grid.clear();
+
+    TTF_Quit();
+}
+
+void Board::SetWinnerCallback(const std::function<void(int)> &callback)
+{
+    winnerCallback = callback;
 }
 
 void Board::Render()
@@ -32,6 +64,9 @@ void Board::Render()
     DrawSelectedCol();
     DrawGrid();
     DrawDiscs();
+
+    if (winner != 0)
+        ShowGameEndMessage(winner);
 }
 
 void Board::DrawGrid()
@@ -81,8 +116,30 @@ void Board::DrawSelectedCol()
     SDL_RenderFillRect(renderer, &rect);
 }
 
+void Board::HandleEvents(SDL_Event &event)
+{
+    switch (event.type)
+    {
+    case SDL_MOUSEBUTTONUP:
+        if (event.button.button == SDL_BUTTON_LEFT)
+        {
+            HandleClick(event.button.x);
+        }
+        break;
+    case SDL_MOUSEMOTION:
+        HandleMouseMove(event.motion.x);
+        break;
+    }
+}
+
 void Board::HandleClick(int XClicked)
 {
+    if (winner != 0)
+    {
+        winnerCallback(winner);
+        return;
+    }
+
     if (playerTurn != PLAYER_1)
         return;
 
@@ -101,8 +158,7 @@ void Board::HandleClick(int XClicked)
 
     if (CountConsecutive(CONNECT4, PLAYER_1))
     {
-        cout << "Player " << PLAYER_1 << " wins!" << endl;
-        // TODO: handle win
+        winner = PLAYER_1;
     }
     else
     {
@@ -112,6 +168,9 @@ void Board::HandleClick(int XClicked)
 
 void Board::HandleMouseMove(int XHovered)
 {
+    if (winner != 0)
+        return;
+
     int col = GetColumnFromMousePosition(XHovered);
 
     if (!CheckIfValidCol(col))
@@ -248,8 +307,7 @@ void Board::AiTurn()
 
         if (CountConsecutive(CONNECT4, PLAYER_2))
         {
-            cout << "AI wins!" << endl;
-            // TODO: handle win
+            winner = PLAYER_2;
         }
     }
 }
@@ -274,7 +332,9 @@ std::pair<int, int> Board::Minimax(int depth, bool isMaximizing)
     int score = EvaluateBoard();
 
     if (CountConsecutive(4, PLAYER_1) || CountConsecutive(4, PLAYER_2) || IsBoardFull() || depth == 0)
+    {
         return {-1, score * (depth + 1)};
+    }
 
     if (isMaximizing)
     {
@@ -367,25 +427,6 @@ bool Board::IsBoardFull() const
     return true;
 }
 
-void Board::LoadTexture(const string &filePath, SDL_Texture *&texture)
-{
-    SDL_Surface *tempSurface = IMG_Load(filePath.c_str());
-    if (!tempSurface)
-    {
-        cerr << "Failed to load image: " << IMG_GetError() << endl;
-        texture = nullptr;
-        return;
-    }
-
-    texture = SDL_CreateTextureFromSurface(renderer, tempSurface);
-    SDL_FreeSurface(tempSurface);
-
-    if (!texture)
-    {
-        cerr << "Failed to create texture: " << SDL_GetError() << endl;
-    }
-}
-
 int Board::GetColumnFromMousePosition(int XClicked) const
 {
     int windowWidth;
@@ -403,4 +444,53 @@ int Board::GetGridLeftX(int windowWidth) const
 int Board::GetGridTopY(int windowHeight) const
 {
     return windowHeight / 2 - rows * cellSize / 2;
+}
+
+void Board::ShowGameEndMessage(int winner)
+{
+    int windowWidth, windowHeight;
+    SDL_GetRendererOutputSize(renderer, &windowWidth, &windowHeight);
+
+    RenderText("Click anywhere to go the Menu", windowWidth / 2 - 175, 20);
+
+    switch (winner)
+    {
+    case PLAYER_1:
+        RenderText("You win!", 40, windowHeight / 2 - 15);
+        RenderText("You win!", 0.875 * windowWidth, windowHeight / 2 - 15);
+        break;
+    case PLAYER_2:
+        RenderText("You lose!", 40, windowHeight / 2 - 15);
+        RenderText("You lose!", 0.875 * windowWidth, windowHeight / 2 - 15);
+        break;
+    default:
+        break;
+    }
+}
+
+void Board::RenderText(const std::string &text, int x, int y)
+{
+    SDL_Surface *textSurface = TTF_RenderText_Solid(font, text.c_str(), textColor);
+    if (!textSurface)
+    {
+        std::cerr << "TTF_RenderText_Solid Error: " << TTF_GetError() << std::endl;
+        return;
+    }
+
+    SDL_Texture *textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
+    SDL_FreeSurface(textSurface);
+
+    if (!textTexture)
+    {
+        std::cerr << "SDL_CreateTextureFromSurface Error: " << SDL_GetError() << std::endl;
+        return;
+    }
+
+    int textWidth = 0, textHeight = 0;
+    SDL_QueryTexture(textTexture, NULL, NULL, &textWidth, &textHeight);
+
+    SDL_Rect textRect = {x, y, textWidth, textHeight};
+    SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
+
+    SDL_DestroyTexture(textTexture);
 }

@@ -5,6 +5,8 @@
 #include <utility>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
+#include <SDL2/SDL_ttf.h>
+#include <functional>
 
 using namespace std;
 
@@ -19,8 +21,11 @@ public:
     ~Board();
 
     void Render();
+    void HandleEvents(SDL_Event &event);
     void HandleClick(int XClicked);
     void HandleMouseMove(int XHovered);
+
+    void SetWinnerCallback(const function<void(int)> &callback);
 
 private:
     void DrawGrid();
@@ -31,7 +36,10 @@ private:
     void PlaceAiDisc(int row, int col);
     void AiTurn();
     void UndoMove(int row, int col);
-    void LoadTexture(const string &filePath, SDL_Texture *&texture);
+    void ShowGameEndMessage(int winner);
+    void RenderText(const string &text, int x, int y);
+
+    function<void(int)> winnerCallback;
 
     int GetEmptySlotFromCol(int col);
     int CountConsecutive(int length, int playerDisc) const;
@@ -53,13 +61,18 @@ private:
     int GetGridTopY(int windowHeight) const;
 
     SDL_Renderer *renderer;
+
     vector<vector<int>> grid;
     int rows, cols, cellSize;
     int playerTurn;
     int selectedCol;
+    int winner;
+
     SDL_Color bgColor, lineColor, player1Color, player2Color;
     SDL_Texture *redDiscTexture;
     SDL_Texture *blueDiscTexture;
+    TTF_Font *font;
+    SDL_Color textColor;
 };
 
 #endif // BOARD_H

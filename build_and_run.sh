@@ -1,17 +1,19 @@
 #!/bin/bash
 
-# Define project root directory and build directory
-PROJECT_ROOT=$(pwd)
-BUILD_DIR="$PROJECT_ROOT/build"
+# Navigate to the project directory
+cd "$(dirname "$0")"
 
-# Create the build directory if it doesn't exist
-if [ ! -d "$BUILD_DIR" ]; then
-    echo "Creating build directory..."
-    mkdir "$BUILD_DIR"
+# Remove existing build directory if it exists
+if [ -d "build" ]; then
+    echo "Removing existing build directory..."
+    rm -rf build
 fi
 
+# Create a new build directory
+mkdir build
+
 # Navigate to the build directory
-cd "$BUILD_DIR"
+cd build
 
 # Configure the project with CMake
 echo "Configuring the project with CMake..."
@@ -19,17 +21,8 @@ cmake ..
 
 # Build the project
 echo "Building the project..."
-cmake --build . -- VERBOSE=1
+make
 
-# Check if the build was successful
-if [ $? -ne 0 ]; then
-    echo "Build failed. Exiting."
-    exit 1
-fi
-
-# Run the executable
-echo "Running the game..."
+# Run the built executable (replace 'connect-4-game' with your actual executable name)
+echo "Running the project..."
 ./Connect4Game
-
-# Return to the project root directory
-cd "$PROJECT_ROOT"

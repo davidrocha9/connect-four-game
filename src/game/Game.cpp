@@ -3,10 +3,11 @@
 
 using namespace std;
 
-Game::Game() : window(nullptr), renderer(nullptr), running(false) {}
+Game::Game() : window(nullptr), renderer(nullptr), running(false), state(GameState::Menu), board(nullptr), menu(nullptr) {}
 
 Game::~Game()
 {
+    delete menu;
     delete board;
 
     if (renderer)
@@ -42,14 +43,13 @@ bool Game::Init()
         return false;
     }
 
-    board = new Board(renderer);
+    menu = new Menu(renderer);
+
     return true;
 }
 
 void Game::Run()
 {
-    Render();
-
     running = true;
     while (running)
     {
@@ -64,19 +64,32 @@ void Game::HandleEvents()
     SDL_Event event;
     while (SDL_PollEvent(&event) != 0)
     {
-        switch (event.type)
+        if (event.type == SDL_QUIT)
         {
-        case SDL_QUIT:
             running = false;
-            break;
-        case SDL_MOUSEBUTTONUP:
-            if (event.button.button == SDL_BUTTON_LEFT)
+            return;
+        }
+
+        switch (state)
+        {
+        case GameState::Menu:
+            if (menu->CheckIfPlayBtnClicked(event))
             {
-                board->HandleClick(event.button.x);
+                delete menu;
+                menu = nullptr;
+
+                board = new Board(renderer);
+                board->SetWinnerCallback([this](int winner)
+                                         {
+                    menu = new Menu(renderer);
+                    state = GameState::Menu;
+                    delete board;
+                    board = nullptr; });
+                state = GameState::InGame;
             }
             break;
-        case SDL_MOUSEMOTION:
-            board->HandleMouseMove(event.motion.x);
+        case GameState::InGame:
+            board->HandleEvents(event);
             break;
         default:
             break;
@@ -89,9 +102,16 @@ void Game::Render()
     SDL_SetRenderDrawColor(renderer, 0xAD, 0xD8, 0xE6, 0xFF);
     SDL_RenderClear(renderer);
 
-    if (board)
+    switch (state)
     {
+    case GameState::Menu:
+        menu->Render();
+        break;
+    case GameState::InGame:
         board->Render();
+        break;
+    default:
+        break;
     }
 
     SDL_RenderPresent(renderer);
